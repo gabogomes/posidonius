@@ -6,27 +6,46 @@ class Tides(object):
         self._data = {
             "effect": "Disabled",
             "parameters": {
-                "input": {
-                    "dissipation_factor_scale": 0.0,
-                    "dissipation_factor": 0.0,
-                    "love_number": 0.0,
+                "creep": {
+                    "input": "uniform_viscosity_coefficient": 0.0,
+                    "internal": {
+                        "denergy_dt": 0.0,
+                        "distance": 0.0,
+                        "orthogonal_component_of_the_tidal_force_due_to_planetary_tide": 0.0,
+                        "orthogonal_component_of_the_tidal_force_due_to_stellar_tide": 0.0,
+                        "radial_component_of_the_tidal_force_due_to_planetary_tide": 0.0,
+                        "radial_component_of_the_tidal_force_due_to_stellar_tide": 0.0,
+                        "radial_component_of_the_tidal_force": 0.0,
+                        "shape": Axes(0.0, 0.0, 0.0).get(),
+                    },
+                    "output": {
+                        "acceleration": Axes(0.0, 0.0, 0.0).get(),
+                        "dangular_momentum_dt": Axes(0.0, 0.0, 0.0).get(),
+                    },
                 },
-                "internal": {
-                    "denergy_dt": 0.0,
-                    "distance": 0.0,
-                    "lag_angle": 0.0,
-                    "orthogonal_component_of_the_tidal_force_due_to_planetary_tide": 0.0,
-                    "orthogonal_component_of_the_tidal_force_due_to_stellar_tide": 0.0,
-                    "radial_component_of_the_tidal_force": 0.0,
-                    "radial_component_of_the_tidal_force_dissipative_part_when_star_as_point_mass": 0.0,
-                    "radial_velocity": 0.0,
-                    "scalar_product_of_vector_position_with_planetary_spin": 0.0,
-                    "scalar_product_of_vector_position_with_stellar_spin": 0.0,
-                    "scaled_dissipation_factor": 0.0,
-                },
-                "output": {
-                    "acceleration": Axes(0.0, 0.0, 0.0).get(),
-                    "dangular_momentum_dt": Axes(0.0, 0.0, 0.0).get(),
+                "ctl": {
+                    "input": {
+                        "dissipation_factor_scale": 0.0,
+                        "dissipation_factor": 0.0,
+                        "love_number": 0.0,
+                    },
+                    "internal": {
+                        "denergy_dt": 0.0,
+                        "distance": 0.0,
+                        "lag_angle": 0.0,
+                        "orthogonal_component_of_the_tidal_force_due_to_planetary_tide": 0.0,
+                        "orthogonal_component_of_the_tidal_force_due_to_stellar_tide": 0.0,
+                        "radial_component_of_the_tidal_force": 0.0,
+                        "radial_component_of_the_tidal_force_dissipative_part_when_star_as_point_mass": 0.0,
+                        "radial_velocity": 0.0,
+                        "scalar_product_of_vector_position_with_planetary_spin": 0.0,
+                        "scalar_product_of_vector_position_with_stellar_spin": 0.0,
+                        "scaled_dissipation_factor": 0.0,
+                    },
+                    "output": {
+                        "acceleration": Axes(0.0, 0.0, 0.0).get(),
+                        "dangular_momentum_dt": Axes(0.0, 0.0, 0.0).get(),
+                    },
                 },
             },
             "coordinates": {

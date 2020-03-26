@@ -1,22 +1,29 @@
 use std::collections::HashMap;
 use super::super::tools;
-use super::super::constants::{K2};
+use super::super::constants::{K2, PI};
 use super::super::{Particle};
 use super::super::{Axes};
 use super::{EvolutionType};
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TidesImplementation {
+    CTL,                  // This model was already in the first version of Posidonius.
+    Creep,                // Creep Tide Theory, 2-D approach based on Folonier et al. (2018) and Gomes et al. (2019).
+}
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TidesParticleInputParameters {
+    pub uniform_viscosity_coefficient: f64, // Creep tide theory reference (CHANGED!) => (3 g m) / (8 pi R^2 eta) = gamma
     pub dissipation_factor: f64,
     pub dissipation_factor_scale: f64, // to scale the dissipation factor (multiply)
     pub love_number: f64,   // Love number of degree 2 (i.e., k2). Dimensionless parameters that measure the rigidity of a planetary body and the 
-                            // susceptibility of its shape to change in response to a tidal potential.
+                            // susceptibility of its shape to change in response to a tidal potential.                       
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TidesParticleInternalParameters {
     pub distance: f64,
+    pub shape: Axes,
     pub radial_velocity: f64,
     pub scaled_dissipation_factor: f64, // sigma (dissipation_factor_scale*dissipation_factor)
     pub scalar_product_of_vector_position_with_stellar_spin: f64,
@@ -65,16 +72,18 @@ pub struct Tides {
 }
 
 impl Tides {
-    pub fn new(effect: TidesEffect, dissipation_factor: f64, dissipation_factor_scale: f64, love_number: f64) -> Tides {
+    pub fn new(effect: TidesEffect, uniform_viscosity_coefficient: f64, dissipation_factor: f64, dissipation_factor_scale: f64, love_number: f64) -> Tides {
         Tides {
             effect: effect,
             parameters: TidesParticleParameters {
                 input: TidesParticleInputParameters {
+                    uniform_viscosity_coefficient: uniform_viscosity_coefficient,
                     dissipation_factor: dissipation_factor,
                     dissipation_factor_scale: dissipation_factor_scale,
                     love_number: love_number,
                 },
                 internal: TidesParticleInternalParameters {
+                    shape: Axes{x: 0., y: 0., z: 0.},
                     distance: 0.,
                     radial_velocity: 0.,
                     scaled_dissipation_factor: dissipation_factor_scale*dissipation_factor,
@@ -217,17 +226,17 @@ pub fn calculate_planet_dependent_dissipation_factors(tidal_host_particle: &mut 
 
 }
 
-pub fn planet_dependent_dissipation_factor(star_planet_dependent_dissipation_factors: &HashMap<usize, f64>,  id: &usize, evolution: EvolutionType, scaled_dissipation_factor: f64) -> f64 {
-    match evolution {
-        EvolutionType::BolmontMathis2016(_) | EvolutionType::GalletBolmont2017(_) | EvolutionType::LeconteChabrier2013(true) => {
-            match star_planet_dependent_dissipation_factors.get(id) {
-                Some(&value) => value,
-                _ => scaled_dissipation_factor // This should not happen
-            }
-        },
-        _ => scaled_dissipation_factor,
-    }
-}
+//pub fn planet_dependent_dissipation_factor(star_planet_dependent_dissipation_factors: &HashMap<usize, f64>,  id: &usize, evolution: EvolutionType, scaled_dissipation_factor: f64) -> f64 {
+//    match evolution {
+//        EvolutionType::BolmontMathis2016(_) | EvolutionType::GalletBolmont2017(_) | EvolutionType::LeconteChabrier2013(true) => {
+//            match star_planet_dependent_dissipation_factors.get(id) {
+//                Some(&value) => value,
+//                _ => scaled_dissipation_factor // This should not happen
+//            }
+//        },
+//        _ => scaled_dissipation_factor,
+//    }
+//}
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -289,6 +298,88 @@ pub fn calculate_torque_due_to_tides(tidal_host_particle: &mut Particle, particl
 
 }
 
+pub fn calculate_particle_shape(semimajor_axis: f64, eccentricity: f64, mean_anomaly: f64, orbital_period: f64,
+     primary_mass: f64, companion_mass: f64, radius: f64, uniform_viscosity_coefficient: f64) -> Axes {
+
+    let alpha: f64;                                                     
+    let epsilon_rho_bar: f64;               
+    let epsilon_z_bar: f64;                 
+    let mean_motion_to_relaxation_factor_ratio: f64;                             
+    let companion_mass_to_sum_of_masses_ratio: f64;                         
+    let mean_motion: f64;                   
+    let relaxation_factor: f64;             
+    let (equatorial_prolateness_constant_coefficient, equatorial_prolateness_cosine_coefficient, 
+        equatorial_prolateness_sine_coefficient): (f64, f64, f64);     
+    let (polar_oblateness_constant_coefficient, polar_oblateness_cosine_coefficient, 
+            polar_oblateness_sine_coefficient): (f64, f64, f64);     
+    let (delta_constant_coefficient, delta_cosine_coefficient, delta_sine_coefficient): (f64, f64, f64);      
+    let (x_component_of_the_equatorial_prolateness, y_component_of_the_equatorial_prolateness): (f64, f64);
+    let (epsilon_rho, epsilon_z, delta, delta2): (f64, f64, f64, f64);
+    
+
+    relaxation_factor = 3.0 * K2 * primary_mass * primary_mass / (8.0 * PI * radius.powi(4) * uniform_viscosity_coefficient);
+    companion_mass_to_sum_of_masses_ratio = companion_mass / (companion_mass + primary_mass);
+    mean_motion = 2.0 * PI / orbital_period;
+
+    // The Epsilons are taken from Equation 49 of Folonier et al. (2018)
+
+    epsilon_rho_bar = 15.0 * companion_mass * radius.powi(3) / (4.0* primary_mass * semimajor_axis.powi(3));
+    epsilon_z_bar = 5.0 * mean_motion * mean_motion * radius.powi(3) / (4.0 * K2 * primary_mass);
+    alpha = 1.0 - (3.0 * companion_mass_to_sum_of_masses_ratio * epsilon_rho_bar); 
+    mean_motion_to_relaxation_factor_ratio = mean_motion/relaxation_factor;
+
+    // Now we calculate individually each coefficient for the analytical solutions
+
+    equatorial_prolateness_constant_coefficient = epsilon_rho_bar * (1.0 + 1.5 * eccentricity.powi(2) - (4.0 * mean_motion_to_relaxation_factor_ratio.powi(2) * eccentricity.powi(2)/(1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2))));
+
+    equatorial_prolateness_cosine_coefficient = 3.0 * epsilon_rho_bar * eccentricity / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2));
+
+    equatorial_prolateness_sine_coefficient = 3.0 * epsilon_rho_bar * eccentricity * mean_motion_to_relaxation_factor_ratio / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2));
+
+    polar_oblateness_constant_coefficient = epsilon_rho_bar * (0.5 + 0.75 * eccentricity.powi(2)) + epsilon_z_bar * (1.0 
+                                      +  12.0 * eccentricity.powi(2) * (1.0 + alpha * mean_motion_to_relaxation_factor_ratio.powi(2))/((1.0 + mean_motion_to_relaxation_factor_ratio.powi(2)) * (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2))) 
+                                      +  2.0 * (1.0 - alpha) * (1.0 - alpha) * mean_motion_to_relaxation_factor_ratio.powi(2) * eccentricity.powi(2) / (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2)));
+
+    polar_oblateness_cosine_coefficient = (1.5 * epsilon_rho_bar * eccentricity / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2))) 
+                                      * (1.0 - (16.0 * companion_mass_to_sum_of_masses_ratio * mean_motion_to_relaxation_factor_ratio.powi(2) * epsilon_z_bar / (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2))));
+                              
+    polar_oblateness_sine_coefficient = (1.5 * epsilon_rho_bar * eccentricity / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2))) 
+                                      * (mean_motion_to_relaxation_factor_ratio + (8.0 * companion_mass_to_sum_of_masses_ratio * mean_motion_to_relaxation_factor_ratio * (1.0 - alpha * mean_motion_to_relaxation_factor_ratio.powi(2)) * epsilon_z_bar / (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2))));
+    
+    delta_constant_coefficient = (3.0 * mean_motion_to_relaxation_factor_ratio * eccentricity.powi(2) / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2))) 
+                                      * (2.0 + (1.0 + alpha) * mean_motion_to_relaxation_factor_ratio.powi(2)) / (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2));
+
+    delta_cosine_coefficient = - 2.0 * mean_motion_to_relaxation_factor_ratio * eccentricity / (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2));
+
+    delta_sine_coefficient = - 2.0 * eccentricity * mean_motion_to_relaxation_factor_ratio.powi(2) * alpha / (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2));
+
+    // Now we can write the temporal dependence through the mean anomaly and the above coefficients
+
+    epsilon_rho = equatorial_prolateness_constant_coefficient 
+                                      + equatorial_prolateness_cosine_coefficient * mean_anomaly.cos() + equatorial_prolateness_sine_coefficient * mean_anomaly.sin();
+
+    epsilon_z = polar_oblateness_constant_coefficient 
+                                      + polar_oblateness_cosine_coefficient * mean_anomaly.cos() + polar_oblateness_sine_coefficient * mean_anomaly.sin();
+
+    delta = delta_constant_coefficient + delta_cosine_coefficient * mean_anomaly.cos() + delta_sine_coefficient * mean_anomaly.sin();
+
+    // Transforming from (epsilon_rho , delta) ===> (x: epsilon_rho cos(2 delta) , y: epsilon_rho sin (2 delta))
+
+    delta2 = 2.0 * delta;
+
+    x_component_of_the_equatorial_prolateness = epsilon_rho * delta2.cos();
+
+    y_component_of_the_equatorial_prolateness = epsilon_rho * delta2.sin();
+
+    Axes{x:x_component_of_the_equatorial_prolateness, y:y_component_of_the_equatorial_prolateness, z:epsilon_z}   
+}
+
+
+
+
+
+
+
 pub fn calculate_orthogonal_component_of_the_tidal_force(tidal_host_particle: &mut Particle, particles: &mut [Particle], more_particles: &mut [Particle], star_planet_dependent_dissipation_factors: &mut HashMap<usize, f64>) {
     let mut tidal_host_particle = tidal_host_particle;
     let mut particles = particles;
@@ -299,80 +390,85 @@ pub fn calculate_orthogonal_component_of_the_tidal_force(tidal_host_particle: &m
     calculate_orthogonal_component_of_the_tidal_force_for(!central_body, &mut tidal_host_particle, &mut particles, &mut more_particles, &mut star_planet_dependent_dissipation_factors);
 }
 
-fn calculate_orthogonal_component_of_the_tidal_force_for(central_body:bool, tidal_host_particle: &mut Particle, particles: &mut [Particle], more_particles: &mut [Particle], star_planet_dependent_dissipation_factors: &mut HashMap<usize, f64>) {
+fn calculate_orthogonal_component_of_the_tidal_force_for(central_body:bool, tidal_host_particle: &mut Particle, particles: &mut [Particle], more_particles: &mut [Particle], _star_planet_dependent_dissipation_factors: &mut HashMap<usize, f64>) {
     for particle in particles.iter_mut().chain(more_particles.iter_mut()) {
         if let TidesEffect::OrbitingBody = particle.tides.effect {
-            //// Only calculate tides if planet is not in disk
-            //if particle.disk_interaction_time == 0.0 {
+            
+            let gm = tidal_host_particle.mass_g + particle.mass_g;
 
-            // (distance to star)^7
-            let distance_7 = particle.tides.parameters.internal.distance.powi(7);
+            let (semimajor_axis, perihelion_distance, eccentricity, _inclination,  _perihelion_longitude, _longitude_of_ascending_node, mean_anomaly, orbital_period) 
+            = tools::calculate_keplerian_orbital_elements(gm, particle.tides.coordinates.position, particle.tides.coordinates.velocity);
+            
+            let _mean_motion = gm.sqrt() * (perihelion_distance/(1.0 - eccentricity)).powf(-1.5);
+            
+            let distance_4 = particle.tides.parameters.internal.distance.powi(4); 
 
-            //// Tidal force calculation (star) :: Only orthogonal component is needed
             if central_body {
-                // - Third line of Equation 5 from Bolmont et al. 2015
-                //   This expression has R**10 (instead of R**5 in Eq. 5) 
-                //   because it uses sigma (i.e., scaled_dissipation_factor) 
-                //   and not k2$\Delta$t (between k2$\Delta$t and sigma 
-                //   there is a R**5 factor as shown in Equation 28)
-                //   - k2 is love number
-                let star_scaled_dissipation_factor = planet_dependent_dissipation_factor(&star_planet_dependent_dissipation_factors, &tidal_host_particle.id, tidal_host_particle.evolution, tidal_host_particle.tides.parameters.internal.scaled_dissipation_factor);
-                particle.tides.parameters.internal.orthogonal_component_of_the_tidal_force_due_to_stellar_tide = 4.5 * (particle.mass.powi(2))
-                                                * (tidal_host_particle.radius.powi(10)) 
-                                                * star_scaled_dissipation_factor / distance_7;
-            } else {
-                // - Second line of Equation 5 from Bolmont et al. 2015
-                //   This expression has R**10 (instead of R**5 in Eq. 5) 
-                //   because it uses sigma (i.e., scaled_dissipation_factor) 
-                //   and not k2$\Delta$t (between k2$\Delta$t and sigma 
-                //   there is a R**5 factor as shown in Equation 28)
-                //   - k2 is love number
-                particle.tides.parameters.internal.orthogonal_component_of_the_tidal_force_due_to_planetary_tide = 4.5 * (tidal_host_particle.mass.powi(2))
-                                                * (particle.radius.powi(10))
-                                                * particle.tides.parameters.internal.scaled_dissipation_factor / distance_7;
 
-                // SBC
-                //println!("> {:e} {:e} {:e} {:e}", tidal_host_particle.mass_g, particle.radius.powi(10), particle.scaled_dissipation_factor, distance_7);
-                //println!("> {:e} {:e} {:e}", particle.tides.coordinates.position.x, particle.tides.coordinates.position.y, particle.tides.coordinates.position.z);
+                // - Third line of Equation 5 from Bolmont et al. 2015
+
+                // Now I add the component of the creep tide theory. The three 
+                // previous lines are now commented instead of an effective part of the program
+                // I call the - tidal_host_particle_Y_shape - the variable 
+                // Epsilon_rho * sin (2 * delta), as in Equation 12
+                // of Gomes et al. (2019)
+
+                tidal_host_particle.tides.parameters.internal.shape = calculate_particle_shape(semimajor_axis, eccentricity, mean_anomaly, orbital_period, 
+                    tidal_host_particle.mass, particle.mass, tidal_host_particle.radius, tidal_host_particle.tides.parameters.input.uniform_viscosity_coefficient);
+            
+                particle.tides.parameters.internal.orthogonal_component_of_the_tidal_force_due_to_stellar_tide = 0.6 * (K2 * tidal_host_particle.mass * particle.mass   
+                                                  * tidal_host_particle.radius.powi(2) * tidal_host_particle.tides.parameters.internal.shape.y) / distance_4;               
+
+            } else {
+                
+                // - Second line of Equation 5 from Bolmont et al. 2015
+
+                // Now I add the component of the creep tide theory. The three 
+                // previous lines are now commented instead of an effective part of the program
+                // I call the - particle_Y_shape - the variable 
+                // Epsilon_rho * sin (2 * delta), as in Equation 12
+                // of Gomes et al. (2019)
+
+                particle.tides.parameters.internal.shape = calculate_particle_shape(semimajor_axis, eccentricity, mean_anomaly, orbital_period, 
+                    particle.mass, tidal_host_particle.mass, particle.radius, particle.tides.parameters.input.uniform_viscosity_coefficient);
+
+                particle.tides.parameters.internal.orthogonal_component_of_the_tidal_force_due_to_planetary_tide = 0.6 * (K2 * tidal_host_particle.mass * particle.mass   
+                                                  * particle.radius.powi(2) * particle.tides.parameters.internal.shape.y) / distance_4;               
+
+               
             }
-            //} else {
-                //if central_body {
-                    //particle.tides.parameters.internal.orthogonal_component_of_the_tidal_force_due_to_stellar_tide = 0.0
-                //} else{
-                    //particle.tides.parameters.internal.orthogonal_component_of_the_tidal_force_due_to_planetary_tide = 0.0
-                //}
-            //}
+            
         }
     }
 }
 
-pub fn calculate_radial_component_of_the_tidal_force(tidal_host_particle: &mut Particle, particles: &mut [Particle], more_particles: &mut [Particle], star_planet_dependent_dissipation_factors: &mut HashMap<usize, f64>) {
-    let star_mass_2 = tidal_host_particle.mass * tidal_host_particle.mass;
+pub fn calculate_radial_component_of_the_tidal_force(tidal_host_particle: &mut Particle, particles: &mut [Particle], more_particles: &mut [Particle], _star_planet_dependent_dissipation_factors: &mut HashMap<usize, f64>) {
+    let _star_mass_2 = tidal_host_particle.mass * tidal_host_particle.mass;
 
     for particle in particles.iter_mut().chain(more_particles.iter_mut()) {
         if let TidesEffect::OrbitingBody = particle.tides.effect {
-            let planet_mass_2 = particle.mass * particle.mass;
+     //       let planet_mass_2 = particle.mass * particle.mass;
             // Conservative part of the radial tidal force
-            let radial_component_of_the_tidal_force_conservative_part = -3.0 * K2 / particle.tides.parameters.internal.distance.powi(7)
-                        * (planet_mass_2 * tidal_host_particle.radius.powi(5) * tidal_host_particle.tides.parameters.input.love_number 
-                        + star_mass_2 * particle.radius.powi(5) * particle.tides.parameters.input.love_number);
+     //       let radial_component_of_the_tidal_force_conservative_part = -3.0 * K2 / particle.tides.parameters.internal.distance.powi(7)
+     //                   * (planet_mass_2 * tidal_host_particle.radius.powi(5) * tidal_host_particle.tides.parameters.input.love_number 
+     //                   + star_mass_2 * particle.radius.powi(5) * particle.tides.parameters.input.love_number);
 
             // Dissipative part of the radial tidal force:
-            let factor1 = -13.5 * particle.tides.parameters.internal.radial_velocity / particle.tides.parameters.internal.distance.powi(8);
-            let star_scaled_dissipation_factor = planet_dependent_dissipation_factor(&star_planet_dependent_dissipation_factors, &particle.id, tidal_host_particle.evolution, tidal_host_particle.tides.parameters.internal.scaled_dissipation_factor);
-            let term1 = planet_mass_2
-                        * tidal_host_particle.radius.powi(10)
-                        * star_scaled_dissipation_factor;
-            let term2 = star_mass_2
-                        * particle.radius.powi(10)
-                        * particle.tides.parameters.internal.scaled_dissipation_factor;
+     //       let factor1 = -13.5 * particle.tides.parameters.internal.radial_velocity / particle.tides.parameters.internal.distance.powi(8);
+     //       let star_scaled_dissipation_factor = planet_dependent_dissipation_factor(&star_planet_dependent_dissipation_factors, &particle.id, tidal_host_particle.evolution, tidal_host_particle.tides.parameters.internal.scaled_dissipation_factor);
+     //       let term1 = planet_mass_2
+     //                   * tidal_host_particle.radius.powi(10)
+     //                   * star_scaled_dissipation_factor;
+     //       let term2 = star_mass_2
+     //                   * particle.radius.powi(10)
+     //                   * particle.tides.parameters.internal.scaled_dissipation_factor;
             // If we consider the star as a point mass (used for denergy_dt calculation):
-            particle.tides.parameters.internal.radial_component_of_the_tidal_force_dissipative_part_when_star_as_point_mass = factor1 * term2;
-            let radial_component_of_the_tidal_force_dissipative_part = particle.tides.parameters.internal.radial_component_of_the_tidal_force_dissipative_part_when_star_as_point_mass + factor1 * term1;
+     //       particle.tides.parameters.internal.radial_component_of_the_tidal_force_dissipative_part_when_star_as_point_mass = factor1 * term2;
+     //       let radial_component_of_the_tidal_force_dissipative_part = particle.tides.parameters.internal.radial_component_of_the_tidal_force_dissipative_part_when_star_as_point_mass + factor1 * term1;
 
             // Sum of the dissipative and conservative part of the radial force
             // - First line Equation 5 from Bolmont et al. 2015
-            particle.tides.parameters.internal.radial_component_of_the_tidal_force = radial_component_of_the_tidal_force_conservative_part + radial_component_of_the_tidal_force_dissipative_part;
+     //       particle.tides.parameters.internal.radial_component_of_the_tidal_force = radial_component_of_the_tidal_force_conservative_part + radial_component_of_the_tidal_force_dissipative_part;
         }
     }
 }
@@ -403,6 +499,7 @@ pub fn calculate_tidal_acceleration(tidal_host_particle: &mut Particle, particle
 
     for particle in particles.iter_mut().chain(more_particles.iter_mut()) {
         if let TidesEffect::OrbitingBody = particle.tides.effect {
+            // if (for CTL)
             let factor1 = 1. / particle.mass;
 
             // - Equation 6 from Bolmont et al. 2015
