@@ -10,7 +10,10 @@ class Tides(object):
                     "dissipation_factor_scale": 0.0,
                     "dissipation_factor": 0.0,
                     "love_number": 0.0,
-                },
+                    "creep_coplanar_tides_input_parameters": {
+                        "uniform_viscosity_coefficient": 0.0,
+                    },
+                }, 
                 "internal": {
                     "denergy_dt": 0.0,
                     "distance": 0.0,
@@ -34,12 +37,14 @@ class Tides(object):
                 "velocity": Axes(0.0, 0.0, 0.0).get(),
             },
         }
-        if variant in ("CentralBody", "OrbitingBody", ):
+        if variant in ("CentralBody", "OrbitingBody", "CreepCoplanarCentralBody", "CreepCoplanarOrbitingBody" ):
             self._data["effect"] = variant
             # Update default values, ignore non-recognised keys
             for key, value in six.iteritems(input_parameters):
                 if key in self._data["parameters"]["input"]:
                     self._data["parameters"]["input"][key] = float(value)
+                elif key in self._data["parameters"]["input"]["creep_coplanar_tides_input_parameters"]:
+                    self._data["parameters"]["input"]["creep_coplanar_tides_input_parameters"][key] = float(value)
                 else:
                     print("Ignored parameter: {}".format(key))
             self._data["parameters"]["internal"]["scaled_dissipation_factor"] = self._data["parameters"]["input"]["dissipation_factor"] * self._data["parameters"]["input"]["dissipation_factor_scale"]
@@ -66,4 +71,10 @@ class CentralBody(Tides):
     def __init__(self, input_parameters):
         super(CentralBody, self).__init__("CentralBody", input_parameters=input_parameters)
 
+#class CreepCoplanarCentralBody(Tides):
+#    def __init__(self, input_parameters):
+#        super(CreepCoplanarOrbitingBody, self).__init__("CreepCoplanarOrbitingBody", input_parameters=input_parameters)
 
+class CreepCoplanarOrbitingBody(Tides):
+    def __init__(self, input_parameters):
+        super(CreepCoplanarOrbitingBody, self).__init__("CreepCoplanarOrbitingBody", input_parameters=input_parameters)

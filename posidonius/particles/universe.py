@@ -82,6 +82,7 @@ class Universe(object):
             else:
                 print("[WARNING {} UTC] Added a particle with tidal effect (central body) but the tidal effect is disabled for this simulation".format(datetime.datetime.utcnow().strftime("%Y.%m.%d %H:%M:%S")))
         if not self._data["consider_effects"]["tides"] and effects.tides.OrbitingBody in particle.effects():
+        #if not self._data["consider_effects"]["tides"] and effects.tides.ConstTimeLagOrbitingBody in particle.effects():
             print("[WARNING {} UTC] Added a particle with tidal effect (orbiting body) but the tidal effect is disabled for this simulation".format(datetime.datetime.utcnow().strftime("%Y.%m.%d %H:%M:%S")))
 
         if effects.rotational_flattening.CentralBody in particle.effects():
@@ -186,6 +187,10 @@ class Universe(object):
             if "CentralBody" in particle['tides']['effect']:
                 found_tides_central_body = True
             elif "OrbitingBody" in particle['tides']['effect']:
+                found_tides_orbiting_body = True
+            elif "CreepCoplanarCentralBody" in particle['tides']['effect']:
+                found_tides_central_body = True
+            elif "CreepCoplanarOrbitingBody" in particle['tides']['effect']:
                 found_tides_orbiting_body = True
             elif "CentralBody" in particle['rotational_flattening']['effect']:
                 found_rotational_flattening_central_body = True
@@ -336,5 +341,4 @@ class Universe(object):
         base_filename = os.path.splitext(filename)[0]
         print("[INFO {} UTC] Start the simulation with:".format(datetime.datetime.utcnow().strftime("%Y.%m.%d %H:%M:%S")))
         print("posidonius start {} {} {}".format(filename, base_filename+".bin", base_filename+"_history.bin"))
-
-
+        

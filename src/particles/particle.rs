@@ -1,7 +1,9 @@
-use super::super::constants::{K2};
-use super::{Axes};
-use super::super::{Tides, RotationalFlattening, GeneralRelativity, Disk, Wind, EvolutionType};
-use super::super::{TidesEffect, RotationalFlatteningEffect, GeneralRelativityEffect, DiskEffect, WindEffect};
+use super::super::constants::K2;
+use super::super::{Disk, EvolutionType, GeneralRelativity, RotationalFlattening, Tides, Wind};
+use super::super::{
+    DiskEffect, GeneralRelativityEffect, RotationalFlatteningEffect, TidesEffect, WindEffect,
+};
+use super::Axes;
 use time;
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
@@ -30,19 +32,19 @@ pub struct Particle {
     // where the host is the most massive particle in the universe
     pub heliocentric_position: Axes,
     pub heliocentric_velocity: Axes,
-    pub heliocentric_distance: f64, // Optimization
-    pub heliocentric_radial_velocity: f64, // Optimization
-    pub heliocentric_norm_velocity_vector: f64, // Optimization
+    pub heliocentric_distance: f64,               // Optimization
+    pub heliocentric_radial_velocity: f64,        // Optimization
+    pub heliocentric_norm_velocity_vector: f64,   // Optimization
     pub heliocentric_norm_velocity_vector_2: f64, // Optimization
     // Spin
     pub spin: Axes,
     pub norm_spin_vector_2: f64,
     pub dangular_momentum_dt: Axes, // Force
     pub dangular_momentum_dt_per_moment_of_inertia: Axes,
-    pub radius_of_gyration_2: f64,  // radius of gyration square can be computed in terms of the mass moment of inertia, which 
-                                    // depends on the shape of the body and determines the torque needed for a desired angular acceleration
+    pub radius_of_gyration_2: f64, // radius of gyration square can be computed in terms of the mass moment of inertia, which
+    // depends on the shape of the body and determines the torque needed for a desired angular acceleration
     pub moment_of_inertia_ratio: f64, // Spin related
-    pub moment_of_inertia: f64, // Spin related
+    pub moment_of_inertia: f64,       // Spin related
     //
     pub reference: Reference, // Particle of reference for computing keplerian orbital parameters
     //
@@ -55,30 +57,60 @@ pub struct Particle {
 }
 
 impl Particle {
-
-    pub fn new(mass: f64, radius: f64, radius_of_gyration: f64, position: Axes, velocity: Axes, spin: Axes) -> Particle {
+    pub fn new(
+        mass: f64,
+        radius: f64,
+        radius_of_gyration: f64,
+        position: Axes,
+        velocity: Axes,
+        spin: Axes,
+    ) -> Particle {
         // Default effects: None
         let dissipation_factor = 0.;
         let dissipation_factor_scale = 0.;
         let love_number = 0.;
+        let uniform_viscosity_coefficient = 0.;
         let k_factor = 0.;
         let rotation_saturation = 0.;
-        let tides = Tides::new(TidesEffect::Disabled, dissipation_factor, dissipation_factor_scale, love_number);
-        let rotational_flattening = RotationalFlattening::new(RotationalFlatteningEffect::Disabled, love_number);
+        let tides = Tides::new(
+            TidesEffect::Disabled,
+            dissipation_factor,
+            dissipation_factor_scale,
+            love_number,
+            uniform_viscosity_coefficient,
+        );
+        let rotational_flattening =
+            RotationalFlattening::new(RotationalFlatteningEffect::Disabled, love_number);
         let general_relativity = GeneralRelativity::new(GeneralRelativityEffect::Disabled);
         let wind = Wind::new(WindEffect::Disabled, k_factor, rotation_saturation);
         let disk = Disk::new(DiskEffect::Disabled);
         let evolution = EvolutionType::NonEvolving;
         let radius_of_gyration_2 = radius_of_gyration.powi(2);
-        Particle { 
+        Particle {
             id: 0, // Unique internal identifier, to be set by the universe
             mass: mass,
-            mass_g: mass*K2,
+            mass_g: mass * K2,
             radius: radius,
-            inertial_position: Axes{x: 0., y: 0., z: 0.}, // To be re-computed by the universe
-            inertial_velocity: Axes{x: 0., y: 0., z: 0.}, // To be re-computed by the universe
-            inertial_acceleration: Axes{x: 0., y: 0., z: 0.},
-            inertial_acceleration_error: Axes{x: 0., y: 0., z: 0.},
+            inertial_position: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            }, // To be re-computed by the universe
+            inertial_velocity: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            }, // To be re-computed by the universe
+            inertial_acceleration: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            inertial_acceleration_error: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
             heliocentric_position: position,
             heliocentric_velocity: velocity,
             heliocentric_distance: 0.,
@@ -87,8 +119,16 @@ impl Particle {
             heliocentric_norm_velocity_vector_2: 0.,
             spin: spin,
             norm_spin_vector_2: (spin.x.powi(2)) + (spin.y.powi(2)) + (spin.z.powi(2)),
-            dangular_momentum_dt: Axes{x: 0., y: 0., z: 0.},
-            dangular_momentum_dt_per_moment_of_inertia: Axes{x: 0., y: 0., z: 0.},
+            dangular_momentum_dt: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            dangular_momentum_dt_per_moment_of_inertia: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
             radius_of_gyration_2: radius_of_gyration_2,
             moment_of_inertia_ratio: 1.,
             moment_of_inertia: mass * radius_of_gyration_2 * radius.powi(2),
@@ -106,33 +146,79 @@ impl Particle {
         let dissipation_factor = 0.;
         let dissipation_factor_scale = 0.;
         let love_number = 0.;
+        let uniform_viscosity_coefficient = 0.;
         let k_factor = 0.;
         let rotation_saturation = 0.;
-        Particle { 
+        Particle {
             id: 0,
             mass: 0.,
             mass_g: 0.,
             radius: 0.,
-            inertial_position: Axes{x: 0., y: 0., z: 0.},
-            inertial_velocity: Axes{x: 0., y: 0., z: 0.},
-            inertial_acceleration: Axes{x: 0., y: 0., z: 0.},
-            inertial_acceleration_error: Axes{x: 0., y: 0., z: 0.},
-            heliocentric_position: Axes{x: 0., y: 0., z: 0.},
-            heliocentric_velocity: Axes{x: 0., y: 0., z: 0.},
+            inertial_position: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            inertial_velocity: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            inertial_acceleration: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            inertial_acceleration_error: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            heliocentric_position: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            heliocentric_velocity: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
             heliocentric_distance: 0.,
             heliocentric_radial_velocity: 0.,
             heliocentric_norm_velocity_vector: 0.,
             heliocentric_norm_velocity_vector_2: 0.,
-            spin: Axes{x: 0., y: 0., z: 0.},
+            spin: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
             norm_spin_vector_2: 0.,
-            dangular_momentum_dt: Axes{x: 0., y: 0., z: 0.},
-            dangular_momentum_dt_per_moment_of_inertia: Axes{x: 0., y: 0., z: 0.},
+            dangular_momentum_dt: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
+            dangular_momentum_dt_per_moment_of_inertia: Axes {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+            },
             radius_of_gyration_2: 0.,
             moment_of_inertia_ratio: 1.,
             moment_of_inertia: 0.,
             reference: Reference::MostMassiveParticle,
-            tides: Tides::new(TidesEffect::Disabled, dissipation_factor, dissipation_factor_scale, love_number),
-            rotational_flattening: RotationalFlattening::new(RotationalFlatteningEffect::Disabled, love_number),
+            tides: Tides::new(
+                TidesEffect::Disabled,
+                dissipation_factor,
+                dissipation_factor_scale,
+                love_number,
+                uniform_viscosity_coefficient,
+            ),
+            rotational_flattening: RotationalFlattening::new(
+                RotationalFlatteningEffect::Disabled,
+                love_number,
+            ),
             general_relativity: GeneralRelativity::new(GeneralRelativityEffect::Disabled),
             wind: Wind::new(WindEffect::Disabled, k_factor, rotation_saturation),
             disk: Disk::new(DiskEffect::Disabled),
@@ -187,4 +273,3 @@ fn evolution_warnings(evolution: EvolutionType) {
         EvolutionType::NonEvolving => {},
     }
 }
-
