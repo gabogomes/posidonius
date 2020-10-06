@@ -4,6 +4,9 @@ use super::super::Axes;
 use super::super::Particle;
 use super::EvolutionType;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TidesParticleInputParameters {
@@ -489,12 +492,28 @@ pub fn calculate_particle_shape(
     let epsilon_z_bar: f64;
     let mean_motion: f64;
     let relaxation_factor: f64;
-    let (x_component_of_the_equatorial_prolateness, y_component_of_the_equatorial_prolateness, epsilon_z): (f64, f64, f64);
+    let (
+        x_component_of_the_equatorial_prolateness,
+        y_component_of_the_equatorial_prolateness,
+        epsilon_z,
+    ): (f64, f64, f64);
     let alpha: f64;
     let mean_motion_to_relaxation_factor_ratio: f64;
-    let (equatorial_prolateness_constant_coefficient, equatorial_prolateness_cosine_coefficient, equatorial_prolateness_sine_coefficient): (f64, f64, f64);
-    let (polar_oblateness_constant_coefficient, polar_oblateness_cosine_coefficient, polar_oblateness_sine_coefficient): (f64, f64, f64);
-    let (delta_constant_coefficient, delta_cosine_coefficient, delta_sine_coefficient): (f64, f64, f64);
+    let (
+        equatorial_prolateness_constant_coefficient,
+        equatorial_prolateness_cosine_coefficient,
+        equatorial_prolateness_sine_coefficient,
+    ): (f64, f64, f64);
+    let (
+        polar_oblateness_constant_coefficient,
+        polar_oblateness_cosine_coefficient,
+        polar_oblateness_sine_coefficient,
+    ): (f64, f64, f64);
+    let (delta_constant_coefficient, delta_cosine_coefficient, delta_sine_coefficient): (
+        f64,
+        f64,
+        f64,
+    );
     let (ep_rho, delta, delta2, epsilon_z): (f64, f64, f64, f64);
     let companion_mass_to_sum_of_masses_ratio: f64;
     let pseudo_synchronization_frequency: f64;
@@ -507,22 +526,26 @@ pub fn calculate_particle_shape(
     epsilon_z_bar = 5.0 * primary_spin * primary_spin * radius.powi(3) / (4.0 * K2 * primary_mass);
     companion_mass_to_sum_of_masses_ratio = companion_mass / (primary_mass + companion_mass);
 
+         // This part is important, adjust properly!
+
     if relaxation_factor < mean_motion {
-        pseudo_synchronization_frequency = - 1.05 * mean_motion;
+        pseudo_synchronization_frequency = 1.1 * mean_motion; // 1.0 * mean_motion + 6.0 * eccentricity * eccentricity * mean_motion;
     } else {
-        pseudo_synchronization_frequency = - 1.0 * mean_motion + 8.0 * eccentricity * eccentricity * mean_motion;
+        pseudo_synchronization_frequency =
+            1.0 * mean_motion + 7.0 * eccentricity * eccentricity * mean_motion; // 1.0 * mean_motion + 8.0 * eccentricity * eccentricity * mean_motion;
     }
-    
-    if primary_spin < pseudo_synchronization_frequency { // be careful here
+
+    if primary_spin < pseudo_synchronization_frequency {
+        // be careful here
         // The Epsilons are taken from Equation 49 of Folonier et al. (2018)
 
-         alpha = 1.0 - (3.0 * companion_mass_to_sum_of_masses_ratio * epsilon_rho_bar);
-         mean_motion_to_relaxation_factor_ratio = mean_motion / relaxation_factor;
-         // mean_motion_to_relaxation_factor_ratio_2 = mean_motion_to_relaxation_factor_ratio.powi(2);
-         // eccentricity_2 = eccentricity.powi(2);
-         // alpha_2 = alpha.powi(2);
+        alpha = 1.0 - (3.0 * companion_mass_to_sum_of_masses_ratio * epsilon_rho_bar);
+        mean_motion_to_relaxation_factor_ratio = mean_motion / relaxation_factor;
+        // mean_motion_to_relaxation_factor_ratio_2 = mean_motion_to_relaxation_factor_ratio.powi(2);
+        // eccentricity_2 = eccentricity.powi(2);
+        // alpha_2 = alpha.powi(2);
 
-         equatorial_prolateness_constant_coefficient = epsilon_rho_bar
+        equatorial_prolateness_constant_coefficient = epsilon_rho_bar
             * (1.0 + 1.5 * eccentricity.powi(2)
                 - (4.0 * mean_motion_to_relaxation_factor_ratio.powi(2) * eccentricity.powi(2)
                     / (1.0 + alpha * alpha * mean_motion_to_relaxation_factor_ratio.powi(2))));
@@ -530,7 +553,7 @@ pub fn calculate_particle_shape(
             / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2));
         equatorial_prolateness_sine_coefficient =
             3.0 * epsilon_rho_bar * eccentricity * mean_motion_to_relaxation_factor_ratio
-               / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2));
+                / (1.0 + mean_motion_to_relaxation_factor_ratio.powi(2));
 
         polar_oblateness_constant_coefficient = epsilon_rho_bar
             * (0.5 + 0.75 * eccentricity.powi(2))
@@ -599,58 +622,72 @@ pub fn calculate_particle_shape(
             z: epsilon_z,
         }
     } else {
+        let cayley = calculate_cayley_coefficients(eccentricity);
+        let mut true_anomaly = calculate_true_anomaly(eccentricity, mean_anomaly);
+        if true_anomaly < 0.0 {
+            true_anomaly = true_anomaly + 2.0 * PI;
+        }
 
+        let mut sum_x_component_of_the_equatorial_prolateness: f64;
+        let mut sum_y_component_of_the_equatorial_prolateness: f64;
+        let mut sum_epsilon_z: f64;
+        let mut equatorial_angles: f64;
+        let mut polar_angles: f64;
 
-    let cayley = calculate_cayley_coefficients(eccentricity);
-    let mut true_anomaly = calculate_true_anomaly(eccentricity, mean_anomaly);
-    if true_anomaly < 0.0 {
-        true_anomaly = true_anomaly + 2.0 * PI;
-    }
-    
-    let mut sum_x_component_of_the_equatorial_prolateness: f64;
-    let mut sum_y_component_of_the_equatorial_prolateness: f64;
-    let mut sum_epsilon_z: f64;
-    let mut equatorial_angles: f64;
-    let mut polar_angles: f64;
+        sum_x_component_of_the_equatorial_prolateness = 0.0;
+        sum_y_component_of_the_equatorial_prolateness = 0.0;
+        sum_epsilon_z = 0.0;
 
-    sum_x_component_of_the_equatorial_prolateness = 0.0;
-    sum_y_component_of_the_equatorial_prolateness = 0.0;
-    sum_epsilon_z = 0.0;
+        let mut k: usize = 0;
 
-    let mut k:usize = 0;
+        // for (k,factor) in cayley[1].iter().enumerate()
 
-    // for (k,factor) in cayley[1].iter().enumerate()
+        while k < 15 {
+            // remove
 
-    while k < 15 {          // remove
+            let dk = k as f64;
 
-        let dk = k as f64;
+            equatorial_angles = (9.0 - dk) * mean_anomaly - 2.0 * true_anomaly;
+            polar_angles = (-7.0 + dk) * mean_anomaly;
 
-        equatorial_angles = (9.0-dk) * mean_anomaly - 2.0 * true_anomaly;
-        polar_angles = (-7.0+dk) * mean_anomaly;
+            // common block (relaxation_factor * cayley[1][k] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)))
 
-        // common block (relaxation_factor * cayley[1][k] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)))
+             sum_x_component_of_the_equatorial_prolateness += relaxation_factor * cayley[1][k]
+                / (relaxation_factor.powi(2)
+                    + (2.0 * primary_spin - (9.0 - dk) * mean_motion).powi(2))
+                * (relaxation_factor * (equatorial_angles).cos()
+                    - (2.0 * primary_spin - (9.0 - dk) * mean_motion) * (equatorial_angles).sin());
+             sum_y_component_of_the_equatorial_prolateness += relaxation_factor * cayley[1][k]
+                / (relaxation_factor.powi(2)
+                    + (2.0 * primary_spin - (9.0 - dk) * mean_motion).powi(2))
+                * (relaxation_factor * (equatorial_angles).sin()
+                    + (2.0 * primary_spin - (9.0 - dk) * mean_motion) * (equatorial_angles).cos());
+             sum_epsilon_z += cayley[0][k]
+                / ((dk - 7.0).powi(2) * mean_motion.powi(2) + relaxation_factor.powi(2))
+                * ((dk - 7.0).powi(2) * mean_motion.powi(2) * (polar_angles).sin()
+                    + relaxation_factor.powi(2) * (polar_angles).cos());
+            //sum_x_component_of_the_equatorial_prolateness += 0.0;
+            //sum_y_component_of_the_equatorial_prolateness += 0.0;
+            //sum_epsilon_z += 0.0;
+             
 
-        sum_x_component_of_the_equatorial_prolateness += relaxation_factor * cayley[1][k] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)) * (relaxation_factor * (equatorial_angles).cos() - (2.0*primary_spin-(9.0-dk)*mean_motion) * (equatorial_angles).sin());
-        sum_y_component_of_the_equatorial_prolateness += relaxation_factor * cayley[1][k] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)) * (relaxation_factor * (equatorial_angles).sin() + (2.0*primary_spin-(9.0-dk)*mean_motion) * (equatorial_angles).cos());
-        
-    // for (k,factor) in cayley[0].iter().enumerate()    
-        
-        sum_epsilon_z += cayley[0][k] / ((dk-7.0).powi(2)*mean_motion.powi(2) + relaxation_factor.powi(2)) * ((dk-7.0).powi(2)*mean_motion.powi(2)*(polar_angles).sin() + relaxation_factor.powi(2)*(polar_angles).cos()); 
+            // println!("{} {} {}", mean_anomaly * 180.0 / PI , relaxation_factor * cayley[1][k as usize] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)) * (relaxation_factor * (equatorial_angles).cos() - (2.0*primary_spin-(9.0-dk)*mean_motion) * (equatorial_angles).sin()) , relaxation_factor * cayley[1][k as usize] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)) * (relaxation_factor * (equatorial_angles).sin() + (2.0*primary_spin-(9.0-dk)*mean_motion) * (equatorial_angles).cos()));
 
-        // println!("{} {} {}", mean_anomaly * 180.0 / PI , relaxation_factor * cayley[1][k as usize] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)) * (relaxation_factor * (equatorial_angles).cos() - (2.0*primary_spin-(9.0-dk)*mean_motion) * (equatorial_angles).sin()) , relaxation_factor * cayley[1][k as usize] / (relaxation_factor.powi(2) + (2.0*primary_spin-(9.0-dk)*mean_motion).powi(2)) * (relaxation_factor * (equatorial_angles).sin() + (2.0*primary_spin-(9.0-dk)*mean_motion) * (equatorial_angles).cos()));
+            k += 1;
+        }
 
-        k += 1;
+        // println!("{}", 0.5 * sum_y_component_of_the_equatorial_prolateness / sum_x_component_of_the_equatorial_prolateness * 180.0 / PI);
 
-    }
+        sum_epsilon_z = (sum_epsilon_z * epsilon_rho_bar / 2.0) + epsilon_z_bar; // In case tides + rotation are taken into account
 
-    // println!("{}", 0.5 * sum_y_component_of_the_equatorial_prolateness / sum_x_component_of_the_equatorial_prolateness * 180.0 / PI);
+        //sum_epsilon_z = epsilon_z_bar; // In case only rotational flattenings are taken into account
 
-    sum_epsilon_z = (sum_epsilon_z*epsilon_rho_bar/2.0) + epsilon_z_bar; 
+        x_component_of_the_equatorial_prolateness =
+            sum_x_component_of_the_equatorial_prolateness * epsilon_rho_bar;
+        y_component_of_the_equatorial_prolateness =
+            sum_y_component_of_the_equatorial_prolateness * epsilon_rho_bar;
+        epsilon_z = sum_epsilon_z;
 
-    x_component_of_the_equatorial_prolateness = sum_x_component_of_the_equatorial_prolateness * epsilon_rho_bar;
-    y_component_of_the_equatorial_prolateness = sum_y_component_of_the_equatorial_prolateness * epsilon_rho_bar;
-    epsilon_z = sum_epsilon_z;
-    
         Axes {
             x: x_component_of_the_equatorial_prolateness,
             y: y_component_of_the_equatorial_prolateness,
@@ -658,6 +695,18 @@ pub fn calculate_particle_shape(
         }
     }
 }
+
+//#[allow(dead_code)]
+//fn open_file() {
+//    let path = Path::new("write_TTV_k2265b.txt");
+//    let display = path.display();
+
+// Open a file in write-only mode, returns `io::Result<File>`
+//    let mut file = match File::create(&path) {
+//        Err(why) => panic!("couldn't create {}: {}", display, why),
+//        Ok(file) => file,
+//    };
+//}
 
 //////////////////////////////////////////////////////////////////////////////
 //// TIDES
@@ -769,6 +818,9 @@ pub fn calculate_torque_due_to_tides(
             );
             let spin = particle.spin.z;
             let distance = particle.tides.parameters.internal.distance;
+            let true_anomaly = calculate_true_anomaly(eccentricity, mean_anomaly);
+
+            //     println!("{} {}", perihelion_longitude, true_anomaly);
 
             let particle_shape = calculate_particle_shape(
                 semimajor_axis,
@@ -789,6 +841,7 @@ pub fn calculate_torque_due_to_tides(
 
             let torque_due_to_tides_x: f64 = 0.;
             let torque_due_to_tides_y: f64 = 0.;
+            //let torque_due_to_tides_z: f64 = 0.0;
             let torque_due_to_tides_z: f64 = 3.0 / 5.0
                 * K2
                 * particle.mass
@@ -797,14 +850,14 @@ pub fn calculate_torque_due_to_tides(
                 * particle.radius
                 * particle_shape.y
                 / distance.powi(3);
-            // println!("{}", spin / (2.0 * PI / orbital_period));
+             //println!("{}", spin / (2.0 * PI / orbital_period));
 
             let factor = -1.0;
             if central_body {
                 // Integration of the spin (total torque tides):
-                dangular_momentum_dt.x += factor * torque_due_to_tides_x;
-                dangular_momentum_dt.y += factor * torque_due_to_tides_y;
-                dangular_momentum_dt.z += factor * torque_due_to_tides_z;
+                dangular_momentum_dt.x += 0.;//factor * torque_due_to_tides_x;
+                dangular_momentum_dt.y += 0.;//factor * torque_due_to_tides_y;
+                dangular_momentum_dt.z += 0.;//factor * torque_due_to_tides_z;
             } else {
                 particle.tides.parameters.output.dangular_momentum_dt.x =
                     factor * torque_due_to_tides_x;
