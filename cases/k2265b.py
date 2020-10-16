@@ -14,7 +14,7 @@ if __name__ == "__main__":
     #initial_time = 4.5e6*365.25 # time [days] where simulation starts
     #initial_time = 1.2e6*365.25 # time [days] where simulation starts
     initial_time = 0.0
-    time_step = 0.0001  # days - (0.01)
+    time_step = 0.0005  # days - (0.01)
     #time_step = 0.05 # days
     #time_limit   = 4*time_step # days
     #time_limit   = 365.25 * 1.0e8 # days
@@ -113,10 +113,10 @@ if __name__ == "__main__":
     # Masses in M_SUN
     planet_mass = 3.0e-6*6.54 # Solar masses (3.0e-6 solar masses = 1 earth mass) 3.03 3.78 10^18 10^20
     # Uniform viscosity coefficient in Pa s
-    planet_uniform_viscosity_coefficient = 9.68e21
+    planet_uniform_viscosity_coefficient = 1.0e22 #9.68e21
 
     a = 0.03376;                             # semi-major axis (in AU)
-    e = 0.005;                               # eccentricity
+    e = 0.15;                                 # eccentricity
     i = 0. * posidonius.constants.DEG2RAD;                      # inclination (degrees)
     p = 0. * posidonius.constants.DEG2RAD;                                # argument of pericentre (degrees)
     n = 0. * posidonius.constants.DEG2RAD;                      # longitude of the ascending node (degrees)
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     planet_obliquity = 0.0e0 # rad
     # Pseudo-synchronization period
     planet_pseudo_synchronization_period = posidonius.calculate_pseudo_synchronization_period(a, 0.0, star_mass, planet_mass) # days
-    planet_angular_frequency = posidonius.constants.TWO_PI * 1.5/(planet_pseudo_synchronization_period) # days^-1
+    planet_angular_frequency = posidonius.constants.TWO_PI * 0.5/(planet_pseudo_synchronization_period) # days^-1
     planet_keplerian_orbital_elements = posidonius.calculate_keplerian_orbital_elements(planet_mass, planet_position, planet_velocity, masses=[star_mass], positions=[star_position], velocities=[star_velocity])
     planet_inclination = planet_keplerian_orbital_elements[3]
     planet_spin = posidonius.calculate_spin(planet_angular_frequency, planet_inclination, planet_obliquity)
