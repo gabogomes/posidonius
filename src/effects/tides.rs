@@ -529,7 +529,7 @@ pub fn calculate_particle_shape(
          // This part is important, adjust properly!
 
     if relaxation_factor < mean_motion {
-        pseudo_synchronization_frequency = 1.1 * mean_motion; // 1.0 * mean_motion + 6.0 * eccentricity * eccentricity * mean_motion;
+        pseudo_synchronization_frequency = 0.9 * mean_motion; // 1.0 * mean_motion + 6.0 * eccentricity * eccentricity * mean_motion;
     } else {
         pseudo_synchronization_frequency =
             1.0 * mean_motion + 7.0 * eccentricity * eccentricity * mean_motion; // 1.0 * mean_motion + 8.0 * eccentricity * eccentricity * mean_motion;
@@ -842,6 +842,9 @@ pub fn calculate_torque_due_to_tides(
             let torque_due_to_tides_x: f64 = 0.;
             let torque_due_to_tides_y: f64 = 0.;
             //let torque_due_to_tides_z: f64 = 0.0;
+
+            // Torque expression for studying creep tide tidal despinning (use torque = 0 as above to study stat. rotation, makes code run faster)
+
             let torque_due_to_tides_z: f64 = 3.0 / 5.0
                 * K2
                 * particle.mass
@@ -850,7 +853,8 @@ pub fn calculate_torque_due_to_tides(
                 * particle.radius
                 * particle_shape.y
                 / distance.powi(3);
-             //println!("{}", spin / (2.0 * PI / orbital_period));
+            
+            //println!("{}", spin / (2.0 * PI / orbital_period));
 
             let factor = -1.0;
             if central_body {
@@ -990,27 +994,6 @@ fn calculate_orthogonal_component_of_the_tidal_force_for(
             //}
             //}
         }
-        // if let TidesEffect::CreepCoplanarOrbitingBody = particle.tides.effect {
-        //  //println!("calculate_orthogonal_component_of_the_tidal_force_for");
-        //  if !central_body{
-        //      let gm = tidal_host_particle.mass_g + particle.mass_g;
-        //      let (semimajor_axis, _perihelion_distance, eccentricity, _inclination, _perihelion_longitude, _longitude_of_ascending_node, mean_anomaly, orbital_period) = tools::calculate_keplerian_orbital_elements(gm, particle.tides.coordinates.position, particle.tides.coordinates.velocity);
-        //      let _spin = particle.norm_spin_vector_2.sqrt();
-        //      let distance = particle.tides.parameters.internal.distance;
-        //      let distance_4 = distance.powi(4);
-        //
-        //      let particle_shape = calculate_particle_shape(semimajor_axis, eccentricity, mean_anomaly, orbital_period, particle.mass, tidal_host_particle.mass, particle.radius, particle.tides.parameters.input.creep_coplanar_tides_input_parameters.uniform_viscosity_coefficient);
-        //
-        //      particle.tides.parameters.internal.orthogonal_component_of_the_tidal_force_due_to_planetary_tide =
-        //              0.6 * (K2
-        //              * tidal_host_particle.mass
-        //              * particle.mass
-        //              * particle.radius.powi(2)
-        //              * particle_shape.y)
-        //           / distance_4;
-        //
-        //    }
-        //}
     }
 }
 
@@ -1078,27 +1061,6 @@ pub fn calculate_radial_component_of_the_tidal_force(
                 radial_component_of_the_tidal_force_conservative_part
                     + radial_component_of_the_tidal_force_dissipative_part;
         }
-        //if let TidesEffect::CreepCoplanarOrbitingBody = particle.tides.effect {
-        //    let gm = tidal_host_particle.mass_g + particle.mass_g;
-        //    let (semimajor_axis, _perihelion_distance, eccentricity, _inclination, _perihelion_longitude, _longitude_of_ascending_node, mean_anomaly, orbital_period) = tools::calculate_keplerian_orbital_elements(gm, particle.tides.coordinates.position, particle.tides.coordinates.velocity);
-        //    let distance = particle.tides.parameters.internal.distance;
-        //    let distance_4 = distance.powi(4);
-        //    let particle_shape = calculate_particle_shape(semimajor_axis, eccentricity, mean_anomaly, orbital_period, particle.mass, tidal_host_particle.mass, particle.radius, particle.tides.parameters.input.creep_coplanar_tides_input_parameters.uniform_viscosity_coefficient);
-        //    let _spin = particle.norm_spin_vector_2.sqrt();
-        //
-        //    particle.tides.parameters.internal.radial_component_of_the_tidal_force =
-        //          -0.9 * K2 * particle.mass * tidal_host_particle.mass * particle.radius * particle.radius
-        //               / distance_4
-        //               * particle_shape.x
-        //               + (3.0
-        //                   * K2
-        //                   * particle.mass
-        //                    * tidal_host_particle.mass
-        //                    * particle.radius
-        //                    * particle.radius
-        //                    / (5.0 * distance_4)
-        //                    * particle_shape.z);
-        //}
     }
 }
 
@@ -1296,6 +1258,8 @@ pub fn calculate_tidal_acceleration(
 
             // Factorize common terms;
 
+           // Expression for tides + rotational flattenings
+
             let total_tidal_force_x = particle.tides.coordinates.position.x / distance
                 * (-0.9
                     * K2
@@ -1322,6 +1286,21 @@ pub fn calculate_tidal_acceleration(
                     * particle.radius
                     / (5.0 * distance_4 * distance)
                     * particle_shape.y);
+
+           // Expression for ONLY rotational flattenings
+
+           // let total_tidal_force_x = particle.tides.coordinates.position.x / distance
+           //         * (-3.0
+           //             * K2
+           //             * particle.mass
+           //             * tidal_host_particle.mass
+           //             * particle.radius
+           //             * particle.radius
+           //             / (5.0 * distance_4)
+           //             * particle_shape.z);
+
+           // Expression for tides + rotational flattenings                        
+
             let total_tidal_force_y = particle.tides.coordinates.position.y / distance
                 * (-0.9
                     * K2
@@ -1348,6 +1327,19 @@ pub fn calculate_tidal_acceleration(
                     * particle.radius
                     / (5.0 * distance_4 * distance)
                     * particle_shape.y);
+
+           // Expression for ONLY rotational flattenings                        
+
+           // let total_tidal_force_y = particle.tides.coordinates.position.y / distance
+           //     * (-3.0
+           //         * K2
+           //         * particle.mass
+           //         * tidal_host_particle.mass
+           //         * particle.radius
+           //         * particle.radius
+           //         / (5.0 * distance_4)
+           //         * particle_shape.z);
+           
             let total_tidal_force_z = 0.0;
             // println!("{} {} {}", particle_shape.x, particle_shape.y, particle_shape.z);
             //println!("{}", total_tidal_force_y);
